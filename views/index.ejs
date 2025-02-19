@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebRTC Meeting</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <h1>WebRTC Meeting</h1>
+    <button onclick="createMeeting()">Create Meeting</button>
+    <button onclick="joinMeeting()">Join Meeting</button>
+    <script>
+      function createMeeting() {
+        const meetingId = Math.random().toString(36).substr(2, 9);
+        window.location.href = `/meeting/${meetingId}`;
+      }
+      function joinMeeting() {
+        const meetingId = prompt("Enter Meeting ID:");
+        if (meetingId) window.location.href = `/meeting/${meetingId}`;
+      }
+    </script>
+  </body>
+</html>
