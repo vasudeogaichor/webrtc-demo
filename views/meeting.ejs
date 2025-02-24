@@ -21,7 +21,8 @@
       const localVideo = document.getElementById("localVideo");
       const remoteContainer = document.getElementById("remoteVideos");
       let localStream;
-
+      let pendingOffers = [];
+      let pendingParticipants = [];
       ws.onopen = () => {
         ws.send(JSON.stringify({ type: "join-meeting", meetingId }));
       };
@@ -31,28 +32,64 @@
         .then((stream) => {
           localStream = stream;
           localVideo.srcObject = stream;
+          console.log("localStream - ", localStream);
+          pendingOffers.forEach(({ offer, peerId }) =>
+            handleOffer(offer, peerId, localStream)
+          );
+          pendingOffers = [];
+
+          pendingParticipants.forEach((peerId) =>
+            startPeerConnection(peerId, localStream)
+          );
+          pendingParticipants = [];
         })
         .catch((error) =>
           console.error("Error accessing media devices.", error)
         );
 
       ws.onmessage = (event) => {
-        console.log("event - ", event)
+        console.log("event - ", event);
         const message = JSON.parse(event.data);
         console.log("Received: frontend", message);
 
         switch (message.type) {
           case "new-participant":
-            startPeerConnection(message.peerId, localStream);
+            // startPeerConnection(message.peerId, localStream);
+            if (!localStream) {
+              console.log(
+                "Stream not ready. Queuing participant:",
+                message.peerId
+              );
+              pendingParticipants.push(message.peerId);
+            } else {
+              startPeerConnection(message.peerId, localStream);
+            }
             break;
           case "existing-participants":
             myPeerId = message.currentPeerId;
-            message.peers.forEach((peerId) =>
-              startPeerConnection(peerId, localStream)
-            );
+            // message.peers.forEach((peerId) =>
+            //   startPeerConnection(peerId, localStream)
+            // );
+            if (!localStream) {
+              console.log("Stream not ready. Queuing participant:");
+              pendingParticipants.push(
+                ...message.peers.map((ele) => ele.peerId)
+              );
+            } else {
+              startPeerConnection(message.peerId, localStream);
+            }
             break;
           case "offer":
-            handleOffer(message.payload, message.peerId, localStream);
+            if (!localStream) {
+              console.log("Stream not ready. Queuing offer...");
+              pendingOffers.push({
+                offer: message.payload,
+                peerId: message.peerId,
+              });
+            } else {
+              handleOffer(message.payload, message.peerId, localStream);
+            }
+            // handleOffer(message.payload, message.peerId, localStream);
             break;
           case "answer":
             handleAnswer(message.payload, message.peerId);
@@ -67,7 +104,7 @@
       };
 
       function startPeerConnection(peerId, stream) {
-        console.log('startPeerConnection - ', peerId, peers[peerId])
+        console.log("startPeerConnection - ", peerId, peers[peerId]);
         if (peers[peerId]) return; // Already have a connection with this peer
 
         const peer = new RTCPeerConnection();
@@ -95,28 +132,34 @@
       }
 
       function handleOffer(offer, peerId, stream) {
-        console.log('offer, peerId = ', offer, peerId)
+        console.log("offer, peerId = ", offer, peerId);
+        console.log("handleOffer 1");
         const peer = peers[peerId] || new RTCPeerConnection(); // Reuse if exists
+        console.log("handleOffer 2");
         peers[peerId] = peer;
+        console.log("handleOffer 3");
 
         if (!peer.getLocalStreams().length) {
+          console.log("handleOffer 4");
+
           // Add tracks if not already added
           stream.getTracks().forEach((track) => peer.addTrack(track, stream));
         }
-
+        console.log("peer.onicecandidate........ - ");
         peer.onicecandidate = (event) => {
           if (event.candidate) {
-            console.log('event.candidate = ', event.candidate)
+            console.log("event.candidate = ", event.candidate);
             sendSignal("candidate", event.candidate, peerId);
           }
         };
 
+        console.log("setRemoteDescription............ - ");
         peer
           .setRemoteDescription(new RTCSessionDescription(offer))
           .then(() => peer.createAnswer())
           .then((answer) => peer.setLocalDescription(answer))
           .then(() => sendSignal("answer", peer.localDescription, peerId))
-          .catch(error => console.log('error in asnwer  = ', error));
+          .catch((error) => console.log("error in asnwer  = ", error));
       }
 
       function handleAnswer(answer, peerId) {
@@ -139,7 +182,7 @@
       }
 
       function sendSignal(type, payload, targetPeerId) {
-        console.log('inside sendsignal -', myPeerId)
+        console.log("inside sendsignal -", myPeerId);
         let candidate = payload; // Store payload in candidate variable
         if (type === "candidate" && payload) {
           candidate = {
@@ -149,19 +192,20 @@
             sdpMLineIndex: payload.sdpMLineIndex,
           };
         }
-        console.log('sending signal - ', { type,
-            payload: candidate, // Send the potentially modified candidate
-            targetPeerId,
-            meetingId,
-            peerId: myPeerId
-            })
+        console.log("sending signal - ", {
+          type,
+          payload: candidate, // Send the potentially modified candidate
+          targetPeerId,
+          meetingId,
+          peerId: myPeerId,
+        });
         ws.send(
           JSON.stringify({
             type,
             payload: candidate, // Send the potentially modified candidate
             targetPeerId,
             meetingId,
-            peerId: myPeerId
+            peerId: myPeerId,
           })
         );
       }
