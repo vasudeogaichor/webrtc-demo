@@ -16,3 +16,46 @@ button {
 button:hover {
     background: #ccc;
 }
+
+
+#videoContainer {
+    display: flex;
+    justify-content: space-around;
+    align-items: flex-start;
+    padding: 10px;
+    gap: 20px;
+  }
+  
+  /* Style for Local Video */
+  #localContainer {
+    width: 30%;
+    background: #f0f0f0;
+    border-radius: 10px;
+    padding: 10px;
+    text-align: center;
+  }
+  
+  #localVideo {
+    width: 100%;
+    border-radius: 8px;
+    border: 2px solid black;
+  }
+  
+  /* Style for Remote Videos */
+  #remoteContainer {
+    width: 65%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    background: #e0e0e0;
+    border-radius: 10px;
+    padding: 10px;
+    text-align: center;
+  }
+  
+  #remoteContainer video {
+    width: 45%;
+    border-radius: 8px;
+    border: 2px solid black;
+  }
+  

@@ -9,8 +9,20 @@
 
   <body>
     <h1>Meeting ID: <%= meetingId %></h1>
-    <video id="localVideo" autoplay playsinline muted></video>
-    <div id="remoteVideos"></div>
+    <!-- <video id="localVideo" autoplay playsinline muted></video>
+    <div id="remoteVideos"></div> -->
+
+    <div id="videoContainer">
+      <div id="localContainer">
+        <h3>My Video</h3>
+        <video id="localVideo" autoplay playsinline muted></video>
+      </div>
+      <div id="remoteContainer">
+        <h3>Participants</h3>
+        <!-- Remote videos will be added here dynamically -->
+      </div>
+    </div>
+
     <button onclick="leaveMeeting()">Leave Meeting</button>
 
     <script>
@@ -18,8 +30,9 @@
       let myPeerId;
       const ws = new WebSocket(`ws://${window.location.host}`);
       const peers = {};
+      let remoteStreams = {};
       const localVideo = document.getElementById("localVideo");
-      const remoteContainer = document.getElementById("remoteVideos");
+      const remoteContainer = document.getElementById("remoteContainer");
       let localStream;
       let pendingOffers = [];
       let pendingParticipants = [];
@@ -133,22 +146,22 @@
 
       function handleOffer(offer, peerId, stream) {
         console.log("offer, peerId = ", offer, peerId);
-        console.log("handleOffer 1");
+        // console.log("handleOffer 1");
         const peer = peers[peerId] || new RTCPeerConnection(); // Reuse if exists
-        console.log("handleOffer 2");
+        // console.log("handleOffer 2");
         peers[peerId] = peer;
-        console.log("handleOffer 3");
+        // console.log("handleOffer 3");
 
         if (!peer.getLocalStreams().length) {
-          console.log("handleOffer 4");
+          // console.log("handleOffer 4");
 
           // Add tracks if not already added
           stream.getTracks().forEach((track) => peer.addTrack(track, stream));
         }
-        console.log("peer.onicecandidate........ - ");
+        // console.log("peer.onicecandidate........ - ");
         peer.onicecandidate = (event) => {
           if (event.candidate) {
-            console.log("event.candidate = ", event.candidate);
+            // console.log("event.candidate = ", event.candidate);
             sendSignal("candidate", event.candidate, peerId);
           }
         };
