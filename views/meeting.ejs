@@ -51,9 +51,9 @@
             handleOffer(offer, peerId, localStream)
           );
           pendingOffers = [];
-
+          console.log("pendingParticipants - ", pendingParticipants)
           pendingParticipants.forEach((peerId) =>
-            startPeerConnection(peerId, localStream)
+            startPeerConnection(peerId, localStream, "here1")
           );
           pendingParticipants = [];
         })
@@ -76,7 +76,7 @@
               );
               pendingParticipants.push(message.peerId);
             } else {
-              startPeerConnection(message.peerId, localStream);
+              startPeerConnection(message.peerId, localStream, "here2");
             }
             break;
           case "existing-participants":
@@ -86,11 +86,10 @@
             // );
             if (!localStream) {
               console.log("Stream not ready. Queuing participant:");
-              pendingParticipants.push(
-                ...message.peers.map((ele) => ele.peerId)
-              );
+              pendingParticipants.push(...message.peers);
+              console.log('pendingParticipants 2 - ', pendingParticipants)
             } else {
-              startPeerConnection(message.peerId, localStream);
+              startPeerConnection(message.peerId, localStream, "here3");
             }
             break;
           case "offer":
@@ -117,8 +116,8 @@
         }
       };
 
-      function startPeerConnection(peerId, stream) {
-        // console.log("startPeerConnection - ", peerId, peers[peerId]);
+      function startPeerConnection(peerId, stream, where) {
+        console.log("startPeerConnection - ", peerId, peers[peerId], where);
         if (peers[peerId]) return; // Already have a connection with this peer
 
         const peer = new RTCPeerConnection();
