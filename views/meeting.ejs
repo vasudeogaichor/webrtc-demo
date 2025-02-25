@@ -36,6 +36,7 @@
       let localStream;
       let pendingOffers = [];
       let pendingParticipants = [];
+      let pendingCandidates = [];
       ws.onopen = () => {
         ws.send(JSON.stringify({ type: "join-meeting", meetingId }));
       };
@@ -117,7 +118,7 @@
       };
 
       function startPeerConnection(peerId, stream) {
-        console.log("startPeerConnection - ", peerId, peers[peerId]);
+        // console.log("startPeerConnection - ", peerId, peers[peerId]);
         if (peers[peerId]) return; // Already have a connection with this peer
 
         const peer = new RTCPeerConnection();
@@ -138,6 +139,18 @@
           }
         };
 
+        if (pendingCandidates[peerId]) {
+          console.log(`Processing queued candidates for ${peerId}`);
+          pendingCandidates[peerId].forEach((candidate) => {
+            peer
+              .addIceCandidate(new RTCIceCandidate(candidate))
+              .catch((err) =>
+                console.error("Error adding queued ICE candidate:", err)
+              );
+          });
+          delete pendingCandidates[peerId]; // Clear queue
+        }
+
         peer
           .createOffer()
           .then((offer) => peer.setLocalDescription(offer))
@@ -145,7 +158,7 @@
       }
 
       function handleOffer(offer, peerId, stream) {
-        console.log("offer, peerId = ", offer, peerId);
+        // console.log("offer, peerId = ", offer, peerId);
         // console.log("handleOffer 1");
         const peer = peers[peerId] || new RTCPeerConnection(); // Reuse if exists
         // console.log("handleOffer 2");
@@ -166,7 +179,7 @@
           }
         };
 
-        console.log("setRemoteDescription............ - ");
+        // console.log("setRemoteDescription............ - ");
         peer
           .setRemoteDescription(new RTCSessionDescription(offer))
           .then(() => peer.createAnswer())
@@ -176,11 +189,24 @@
       }
 
       function handleAnswer(answer, peerId) {
+        console.log("handleanswer - ", answer, peerId);
+        console.log("peers[peerId] - ", peers[peerId]);
         peers[peerId].setRemoteDescription(new RTCSessionDescription(answer));
       }
 
       function handleCandidate(candidate, peerId) {
         try {
+          if (!peers[peerId]) {
+            console.warn(
+              `Peer connection for ${peerId} not found, queuing candidate.`
+            );
+            if (!pendingCandidates[peerId]) {
+              pendingCandidates[peerId] = [];
+            }
+            pendingCandidates[peerId].push(candidate);
+            return;
+          }
+
           if (candidate) {
             const iceCandidate = new RTCIceCandidate(candidate);
             peers[peerId]
@@ -195,7 +221,7 @@
       }
 
       function sendSignal(type, payload, targetPeerId) {
-        console.log("inside sendsignal -", myPeerId);
+        // console.log("inside sendsignal -", myPeerId);
         let candidate = payload; // Store payload in candidate variable
         if (type === "candidate" && payload) {
           candidate = {
