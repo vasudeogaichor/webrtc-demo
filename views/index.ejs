@@ -4,20 +4,233 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>WebRTC Meeting</title>
-    <link rel="stylesheet" href="/style.css" />
   </head>
   <body>
     <h1>WebRTC Meeting</h1>
-    <button onclick="createMeeting()">Create Meeting</button>
-    <button onclick="joinMeeting()">Join Meeting</button>
+
+    <!-- Initial UI -->
+    <div id="setup">
+      <h2>Allow Camera & Microphone</h2>
+      <video id="localVideo" autoplay playsinline muted></video>
+      <br />
+      <button id="createMeeting" disabled>Create Meeting</button>
+      <br />
+      <input type="text" id="meetingIdInput" placeholder="Enter Meeting ID" />
+      <button id="joinMeeting" disabled>Join Meeting</button>
+    </div>
+
+    <!-- Meeting UI (hidden initially) -->
+    <div id="meetingUI" style="display: none">
+      <h2>Meeting ID: <span id="meetingIdDisplay"></span></h2>
+      <div id="videoContainer">
+        <div id="localContainer">
+          <h3>My Video</h3>
+          <video id="localVideoMeeting" autoplay playsinline muted></video>
+        </div>
+        <div id="remoteContainer">
+          <h3>Participants</h3>
+        </div>
+      </div>
+      <button onclick="leaveMeeting()">Leave Meeting</button>
+    </div>
+
     <script>
-      function createMeeting() {
-        const meetingId = Math.random().toString(36).substr(2, 9);
-        window.location.href = `/meeting/${meetingId}`;
+      let localStream;
+      let ws;
+      let myPeerId;
+      const peers = {};
+      let meetingId;
+
+      const localVideo = document.getElementById("localVideo");
+      const localVideoMeeting = document.getElementById("localVideoMeeting");
+      const remoteContainer = document.getElementById("remoteContainer");
+      const createMeetingBtn = document.getElementById("createMeeting");
+      const joinMeetingBtn = document.getElementById("joinMeeting");
+      const meetingIdInput = document.getElementById("meetingIdInput");
+
+      // Request camera & microphone access
+      navigator.mediaDevices
+        .getUserMedia({ video: true, audio: true })
+        .then((stream) => {
+          localStream = stream;
+          localVideo.srcObject = stream;
+          localVideoMeeting.srcObject = stream; // Will be used in meeting UI
+          createMeetingBtn.disabled = false;
+          joinMeetingBtn.disabled = false;
+        })
+        .catch((error) => {
+          console.error("Error accessing media devices.", error);
+        });
+
+      createMeetingBtn.onclick = () => {
+        meetingId = Math.random().toString(36).substr(2, 9); // Generate random meeting ID
+        startMeeting();
+      };
+
+      joinMeetingBtn.onclick = () => {
+        meetingId = meetingIdInput.value.trim();
+        if (meetingId) {
+          startMeeting();
+        } else {
+          alert("Please enter a Meeting ID.");
+        }
+      };
+
+      function startMeeting() {
+        document.getElementById("setup").style.display = "none";
+        document.getElementById("meetingUI").style.display = "block";
+        document.getElementById("meetingIdDisplay").textContent = meetingId;
+
+        ws = new WebSocket(`ws://${window.location.host}`);
+        ws.onopen = () => {
+          ws.send(JSON.stringify({ type: "join-meeting", meetingId }));
+        };
+
+        ws.onmessage = (event) => {
+          const message = JSON.parse(event.data);
+
+          switch (message.type) {
+            case "new-participant":
+              if (message.peerId !== myPeerId) {
+                // Ignore self
+                startPeerConnection(message.peerId, localStream);
+              }
+              // startPeerConnection(message.peerId, localStream);
+              break;
+            case "existing-participants":
+              myPeerId = message.currentPeerId;
+              message.peers.forEach((peer) =>
+                // startPeerConnection(peer.peerId, localStream)
+                {
+                  if (peer.peerId !== myPeerId) {
+                    // Ignore self
+                    startPeerConnection(peer.peerId, localStream);
+                  }
+                }
+              );
+              break;
+            case "offer":
+              handleOffer(message.payload, message.peerId, localStream);
+              break;
+            case "answer":
+              handleAnswer(message.payload, message.peerId);
+              break;
+            case "candidate":
+              handleCandidate(message.payload, message.peerId);
+              break;
+            case "leave-meeting":
+              handleRemoteDisconnection(message.peerId);
+              break;
+          }
+        };
       }
-      function joinMeeting() {
-        const meetingId = prompt("Enter Meeting ID:");
-        if (meetingId) window.location.href = `/meeting/${meetingId}`;
+
+      function startPeerConnection(peerId, stream) {
+        // if (peers[peerId]) return;
+        if (peers[peerId] || peerId === myPeerId) return; // Ignore self
+
+        const peer = new RTCPeerConnection();
+        peers[peerId] = peer;
+
+        stream.getTracks().forEach((track) => peer.addTrack(track, stream));
+
+        peer.ontrack = (event) => {
+          // const remoteVideo = document.createElement("video");
+          // remoteVideo.autoplay = true;
+          // remoteVideo.srcObject = event.streams[0];
+          // remoteContainer.appendChild(remoteVideo);
+
+          if (!document.getElementById(peerId)) {
+            // Ensure only one video per peer
+            const remoteVideo = document.createElement("video");
+            remoteVideo.autoplay = true;
+            remoteVideo.id = peerId;
+            remoteVideo.srcObject = event.streams[0];
+            remoteContainer.appendChild(remoteVideo);
+          }
+        };
+
+        peer.onicecandidate = (event) => {
+          if (event.candidate) {
+            sendSignal("candidate", event.candidate, peerId);
+          }
+        };
+
+        peer
+          .createOffer()
+          .then((offer) => peer.setLocalDescription(offer))
+          .then(() => sendSignal("offer", peer.localDescription, peerId));
+      }
+
+      function handleOffer(offer, peerId, stream) {
+        if (peers[peerId]) return; // Avoid duplicate peer connections
+        const peer = new RTCPeerConnection();
+        peers[peerId] = peer;
+
+        stream.getTracks().forEach((track) => peer.addTrack(track, stream));
+
+        peer.onicecandidate = (event) => {
+          if (event.candidate) {
+            sendSignal("candidate", event.candidate, peerId);
+          }
+        };
+
+        peer.ontrack = (event) => {
+          // const remoteVideo = document.createElement("video");
+          // remoteVideo.autoplay = true;
+          // remoteVideo.srcObject = event.streams[0];
+          // remoteContainer.appendChild(remoteVideo);
+
+          if (!document.getElementById(peerId)) {
+            // Prevent duplicate video elements
+            const remoteVideo = document.createElement("video");
+            remoteVideo.autoplay = true;
+            remoteVideo.id = peerId;
+            remoteVideo.srcObject = event.streams[0];
+            remoteContainer.appendChild(remoteVideo);
+          }
+        };
+
+        peer
+          .setRemoteDescription(new RTCSessionDescription(offer))
+          .then(() => peer.createAnswer())
+          .then((answer) => peer.setLocalDescription(answer))
+          .then(() => sendSignal("answer", peer.localDescription, peerId));
+      }
+
+      function handleAnswer(answer, peerId) {
+        peers[peerId].setRemoteDescription(new RTCSessionDescription(answer));
+      }
+
+      function handleCandidate(candidate, peerId) {
+        if (peers[peerId]) {
+          peers[peerId].addIceCandidate(new RTCIceCandidate(candidate));
+        }
+      }
+
+      function sendSignal(type, payload, targetPeerId) {
+        ws.send(
+          JSON.stringify({
+            type,
+            payload,
+            targetPeerId,
+            meetingId,
+            peerId: myPeerId,
+          })
+        );
+      }
+
+      function handleRemoteDisconnection(peerId) {
+        if (peers[peerId]) {
+          peers[peerId].close();
+          delete peers[peerId];
+        }
+      }
+
+      function leaveMeeting() {
+        ws.send(JSON.stringify({ type: "leave-meeting", meetingId }));
+        ws.close();
+        window.location.reload();
       }
     </script>
   </body>
