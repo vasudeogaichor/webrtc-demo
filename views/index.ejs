@@ -88,7 +88,7 @@
 
         ws.onmessage = (event) => {
           const message = JSON.parse(event.data);
-
+          console.log('message - ', message)
           switch (message.type) {
             case "new-participant":
               if (message.peerId !== myPeerId) {
@@ -118,7 +118,7 @@
             case "candidate":
               handleCandidate(message.payload, message.peerId);
               break;
-            case "leave-meeting":
+            case "participant-left":
               handleRemoteDisconnection(message.peerId);
               break;
           }
@@ -224,6 +224,12 @@
         if (peers[peerId]) {
           peers[peerId].close();
           delete peers[peerId];
+        }
+
+        const videoElement = document.getElementById(`${peerId}`);
+        if (videoElement) {
+          videoElement.srcObject = null; // Stop the stream
+          videoElement.remove(); // Remove from DOM
         }
       }
 
