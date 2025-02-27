@@ -88,7 +88,7 @@
 
         ws.onmessage = (event) => {
           const message = JSON.parse(event.data);
-          console.log('message - ', message)
+          console.log("message - ", message);
           switch (message.type) {
             case "new-participant":
               if (message.peerId !== myPeerId) {
@@ -147,6 +147,9 @@
             remoteVideo.id = peerId;
             remoteVideo.srcObject = event.streams[0];
             remoteContainer.appendChild(remoteVideo);
+            let label = document.createElement("div");
+            label.innerText = `Peer ID: ${peerId}`;
+            remoteContainer.appendChild(label);
           }
         };
 
@@ -188,6 +191,9 @@
             remoteVideo.id = peerId;
             remoteVideo.srcObject = event.streams[0];
             remoteContainer.appendChild(remoteVideo);
+            let label = document.createElement("div");
+            label.innerText = `Peer ID: ${peerId}`;
+            remoteContainer.appendChild(label);
           }
         };
 
